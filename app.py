@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from pandas import DataFrame
-from IPython.display import display
 
 import dash
 import dash_core_components as dcc
@@ -17,13 +16,16 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+#app for deployment
+
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+server = app.server
 
-rxs = pd.read_csv('https://raw.githubusercontent.com/adamagovino/rx-app/main/rx_short.csv')
+rxshort = pd.read_csv('https://raw.githubusercontent.com/adamagovino/rx-app/main/rx_short.csv')
 
-df = rxs
+df = rxshort
 
 app.layout = html.Div([
     
@@ -32,7 +34,7 @@ app.layout = html.Div([
     dcc.Dropdown(
         id='meds-dpdn',
         options=[{'label': s, 'value': s} for s in sorted(df.Drug_Name.unique())],
-
+        value=None,
         clearable=False
     ),
 
@@ -75,7 +77,7 @@ def plans_value(available_options):
 
 def update_table(plan,med):
 
-    filt_exact = rxs[rxs['Drug_Name']==med]
+    filt_exact = df[df['Drug_Name']==med]
     ndc = filt_exact['NDC'].iloc[0]
     brand_gen = filt_exact['Brand/Generic'].iloc[0]
 
@@ -85,13 +87,25 @@ def update_table(plan,med):
     else:
         split_name = (med.split())[0]
         first6 = split_name[0:6].lower().replace(' ','')
-        filt_med = rxs[(rxs['Drug Name First6']==first6) & (rxs['Plan']==plan)]
+        filt_med = df[(df['Drug Name First6']==first6) & (df['Plan']==plan)]
 
-        strength = rxs[rxs['Drug_Name']==med]['Strength'].iloc[0]
+        strength = df[df['Drug_Name']==med]['Strength'].iloc[0]
         filt_strength = filt_med[filt_med['Strength']==strength]
 
         if (len(filt_med) < 1) or (len(filt_strength) <1):
+            
+            data = {'This Medicine Does not Have Enough Comps to Make a Table or Something Else iS Wrong':  ['First value']}
+
+            end_function_df = pd.DataFrame(data, columns = ['This Medicine Doesnt Have Accurate Comps'])
+            
             print("Drug and/or Strength Not Found Using This Plan")
+            
+            return html.Div([dt.DataTable(
+                data=end_function_df.to_dict('rows'),
+                columns=[{'name': i, 'id': i} for i in end_function_df.columns],
+                ),
+                html.Hr()
+                            ])
 
         #2) filtering out by 1) same med+strength 2) same med, any strength, 3) same class (any med any strength)
         else:
@@ -101,8 +115,8 @@ def update_table(plan,med):
             indications = [indication1,indication2]
             route = filt_exact['Route'].iloc[0]
 
-            filt_class = rxs[(rxs['New_Class']==med_class) & (rxs['Plan']==plan) & (rxs['Route']==route)]
-            filt_ind = rxs[(rxs['Indication_One']==indication1) | (rxs['Indication_One']==indication2) | (rxs['Indication_Two']==indication1) | (rxs['Indication_Two']==indication2)]
+            filt_class = df[(df['New_Class']==med_class) & (df['Plan']==plan) & (df['Route']==route)]
+            filt_ind = df[(df['Indication_One']==indication1) | (df['Indication_One']==indication2) | (df['Indication_Two']==indication1) | (df['Indication_Two']==indication2)]
 
             #Table based on same drug and strength
             ndcs = list(set(filt_strength['NDC']))
@@ -164,12 +178,12 @@ def update_table(plan,med):
             ndci_df.sort_values(by=['Spread'], inplace=True, ascending=False)
             ndci_df = ndci_df.head()
             
-        return html.Div([dt.DataTable(
-            data=ndci_df.to_dict('rows'),
-            columns=[{'name': i, 'id': i} for i in ndci_df.columns],
-            ),
-            html.Hr()
-                        ])
+            return html.Div([dt.DataTable(
+                data=ndci_df.to_dict('rows'),
+                columns=[{'name': i, 'id': i} for i in ndci_df.columns],
+                ),
+                html.Hr()
+                            ])
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False)
